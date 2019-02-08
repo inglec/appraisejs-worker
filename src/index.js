@@ -1,8 +1,6 @@
 const bodyParser = require('body-parser');
 const dockerode = require('dockerode');
 const express = require('express');
-const fs = require('fs');
-const fsExtra = require('fs-extra');
 const {
   FORBIDDEN,
   INTERNAL_SERVER_ERROR,
@@ -12,39 +10,28 @@ const path = require('path');
 const util = require('util');
 const vm2 = require('vm2');
 
-const GitHubClient = require('./utils/GitHubClient');
-
-const ensureDir = util.promisify(fsExtra.ensureDir);
-const writeFile = util.promisify(fs.writeFile);
+const { downloadArchive } = require('./utils/github_api');
 
 const TEMP_DIR = '/tmp/appraisejs';
-
-let github;
-
-const downloadCommit = (user, repository, commitId, rootDir = TEMP_DIR) => github
-  .fetchTreeAtCommit(user, repository, commitId)
-  .then((response) => {
-    // Fetch and store each file individually with a separate promise.
-    const promises = response.data.tree
-      .filter(node => node.type === 'blob')
-      .map(node => github
-        .fetchFileAtCommit(user, repository, commitId, node.path)
-        .then((response) => {
-          // Append relative directory to local path.
-          const parsed = path.parse(node.path);
-          const dir = path.join(rootDir, user, repository, commitId, parsed.dir);
-
-          return ensureDir(dir).then(() => writeFile(path.join(dir, parsed.base), response.data));
-        })
-      );
-
-    return Promise.all(promises);
-  });
+const ARCHIVE_DIR = path.join(TEMP_DIR, 'archive')
 
 const decryptBody = body => new Promise((resolve, reject) => {
   // TODO
   resolve({ todo: 'body' });
 });
+
+const initialiseDockerContainer = () => {
+
+};
+
+const runJob = (tokenType, token, owner, repository, commitId) => {
+  downloadArchive(tokenType, token, owner, repository, commitId, ARCHIVE_DIR)
+    .then(() => {
+      console.log('successfully downloaded repository archive');
+      initialiseDockerContainer();
+    })
+    .catch((err) => console.error(err));
+};
 
 const setupExpress = () => {
   const app = express();
@@ -75,25 +62,8 @@ const setupExpress = () => {
   app.post('/assign', (req, res) => {
     // TODO: Authenticate requests + validate request body.
 
-    const {
-      user,
-      repository,
-      commitId,
-    } = req.body;
-
-    downloadCommit(user, repository, commitId)
-      .then((values) => {
-        res.status(OK);
-        res.end();
-
-        console.log(`Successfully fetched ${values.length} files`);
-      })
-      .catch((err) => {
-        res.status(INTERNAL_SERVER_ERROR);
-        res.end();
-
-        console.error(err.response.data);
-      });
+    res.status(OK);
+    res.end();
   });
 
   app.listen(process.env.PORT, () => {
@@ -101,16 +71,14 @@ const setupExpress = () => {
   });
 };
 
-const test = () => {
-  github = new GitHubClient('bearer', 'v1.18cebe423f803d7bab13123569592fc5e6f84de8');
-
-  const user = 'inglec';
-  const repository = 'fyp-webhook-server';
+const test = (app) => {
   const commitId = '7ae42abafaf985108886bb0e5fe006e7c8e5bbf2';
+  const owner = 'inglec';
+  const repository = 'fyp-webhook-server';
+  const token = 'v1.8667d82aaaacfb77caa1e790c0f683c2a4717207';
+  const tokenType = 'bearer';
 
-  downloadCommit(user, repository, commitId)
-    .then(values => console.log(`Successfully fetched ${values.length} files`))
-    .catch(err => console.error(err.response.data));
+  runJob(tokenType, token, owner, repository, commitId);
 };
 
 function main() {
