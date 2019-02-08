@@ -9,11 +9,15 @@ const createAuthorizationHeader = (tokenType, token) => (
   { 'Authorization': `${tokenType} ${token}` }
 );
 
+// Prevent Axios from running JSON.parse on response.data.
+const getRawResponse = response => response;
+
 const fetchFileAtCommit = (tokenType, token, owner, repository, sha, path) => axios.request({
   method: 'GET',
   baseURL: GITHUB_CONTENTS_URL,
   url: `/${owner}/${repository}/${sha}/${path}`,
   headers: createAuthorizationHeader(tokenType, token),
+  transformResponse: getRawResponse,
 });
 
 const fetchTreeAtCommit = (tokenType, token, owner, repository, sha) => axios.request({
@@ -29,10 +33,6 @@ class GitHubClient {
       tokenType,
       token,
     };
-  }
-
-  isAuthenticated() {
-    return !!this.authentication;
   }
 
   fetchFileAtCommit(owner, repository, sha, path) {
