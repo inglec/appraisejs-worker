@@ -5,6 +5,7 @@ const fs = require('fs');
 const fsExtra = require('fs-extra');
 const {
   FORBIDDEN,
+  INTERNAL_SERVER_ERROR,
   OK,
 } = require('http-status-codes');
 const path = require('path');
@@ -20,34 +21,25 @@ const TEMP_DIR = '/tmp/appraisejs';
 
 let github;
 
-const downloadCommit = (user, repository, commitId) => {
-  return github
-    .fetchTreeAtCommit(user, repository, commitId)
-    .then((response) => {
-      const { tree } = response.data;
+const downloadCommit = (user, repository, commitId, rootDir = TEMP_DIR) => github
+  .fetchTreeAtCommit(user, repository, commitId)
+  .then((response) => {
+    // Fetch and store each file individually with a separate promise.
+    const promises = response.data.tree
+      .filter(node => node.type === 'blob')
+      .map(node => github
+        .fetchFileAtCommit(user, repository, commitId, node.path)
+        .then((response) => {
+          // Append relative directory to local path.
+          const parsed = path.parse(node.path);
+          const dir = path.join(rootDir, user, repository, commitId, parsed.dir);
 
-      const downloadFile = filepath => (
-        // Fetch file from GitHub then store locally.
-        github
-          .fetchFileAtCommit(user, repository, commitId, filepath)
-          .then((response) => {
-            const parsed = path.parse(filepath);
-            const dirname = path.join(TEMP_DIR, user, repository, commitId, parsed.dir);
-
-            // Create directory if it does not exist.
-            return ensureDir(dirname)
-              .then(() => writeFile(path.join(dirname, parsed.base), response.data));
-          })
+          return ensureDir(dir).then(() => writeFile(path.join(dir, parsed.base), response.data));
+        })
       );
 
-      // Fetch each file with a separate async promise.
-      const promises = tree
-        .filter(node => node.type === 'blob')
-        .map(node => downloadFile(node.path));
-
-      return Promise.all(promises);
-    })
-};
+    return Promise.all(promises);
+  });
 
 const decryptBody = body => new Promise((resolve, reject) => {
   // TODO
@@ -72,19 +64,36 @@ const setupExpress = () => {
         res.status(OK);
         res.end();
       })
-      .catch((error) => {
+      .catch((err) => {
+        console.error(err.response.data)
+
         res.status(FORBIDDEN);
-        res.send(error);
+        res.send(err);
         res.end();
       });
   });
   app.post('/assign', (req, res) => {
     // TODO: Authenticate requests + validate request body.
 
-    const promise1 = fetchCommit(req.body.commitId);
+    const {
+      user,
+      repository,
+      commitId,
+    } = req.body;
 
-    res.status(OK);
-    res.end();
+    downloadCommit(user, repository, commitId)
+      .then((values) => {
+        res.status(OK);
+        res.end();
+
+        console.log(`Successfully fetched ${values.length} files`);
+      })
+      .catch((err) => {
+        res.status(INTERNAL_SERVER_ERROR);
+        res.end();
+
+        console.error(err.response.data);
+      });
   });
 
   app.listen(process.env.PORT, () => {
@@ -93,14 +102,14 @@ const setupExpress = () => {
 };
 
 const test = () => {
-  github = new GitHubClient('bearer', 'v1.b01ff5ed42e1d90172df46e59f5de91a5710fb3c');
+  github = new GitHubClient('bearer', 'v1.18cebe423f803d7bab13123569592fc5e6f84de8');
 
   const user = 'inglec';
   const repository = 'fyp-webhook-server';
   const commitId = '7ae42abafaf985108886bb0e5fe006e7c8e5bbf2';
 
   downloadCommit(user, repository, commitId)
-    .then(() => console.log('success!'))
+    .then(values => console.log(`Successfully fetched ${values.length} files`))
     .catch(err => console.error(err.response.data));
 };
 
