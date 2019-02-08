@@ -2,6 +2,7 @@ const bodyParser = require('body-parser');
 const dockerode = require('dockerode');
 const express = require('express');
 const fs = require('fs');
+const fsExtra = require('fs-extra');
 const {
   FORBIDDEN,
   OK,
@@ -15,7 +16,7 @@ const {
   getTreeAtCommit,
 } = require('./utils/github_api');
 
-const mkdir = util.promisify(fs.mkdir);
+const ensureDir = util.promisify(fsExtra.ensureDir);
 const writeFile = util.promisify(fs.writeFile);
 
 const decryptBody = body => new Promise((resolve, reject) => {
@@ -63,7 +64,7 @@ const setupExpress = () => {
 
 const test = () => {
   const tokenType = 'bearer';
-  const token = 'v1.3ecb5c0c17a7af245317fc119dd90f570a8166fc';
+  const token = 'v1.b01ff5ed42e1d90172df46e59f5de91a5710fb3c';
   const user = 'inglec';
   const repository = 'fyp-webhook-server';
   const commitId = '7ae42abafaf985108886bb0e5fe006e7c8e5bbf2';
@@ -72,21 +73,29 @@ const test = () => {
     .then((response) => {
       const { tree } = response.data;
 
+      const fetchAndStoreFile = filepath => (
+        // Fetch file from GitHub then store locally.
+        getFileAtCommit(tokenType, token, user, repository, commitId, filepath)
+          .then((response) => {
+            const parsed = path.parse(filepath);
+            const dirname = path.join('/tmp/appraisejs', user, repository, commitId, parsed.dir);
+
+            // Create directory if it does not exist.
+            return ensureDir(dirname)
+              .then(() => writeFile(path.join(dirname, parsed.base), response.data));
+          })
+      );
+
       // Fetch each file with a separate async promise.
       const promises = tree
         .filter(node => node.type === 'blob')
-        .map(node => (
-          getFileAtCommit(tokenType, token, user, repository, commitId, node.path)
-            .then((response) => {
-              const dirname = path.join(__dirname, 'storage', user, repository, commitId);
-              return mkdir(dirname, { recursive: true })
-                .then(() => writeFile(path.join(dirname, node.path), response.data))
-            })
-        ));
+        .map(node => fetchAndStoreFile(node.path));
 
       Promise
         .all(promises)
-        .then(results => console.log(results))
+        .then(() => {
+          console.log('Completed writing.');
+        })
         .catch(console.error);
     })
     .catch(console.error)
