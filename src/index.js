@@ -11,13 +11,43 @@ const path = require('path');
 const util = require('util');
 const vm2 = require('vm2');
 
-const {
-  getFileAtCommit,
-  getTreeAtCommit,
-} = require('./utils/github_api');
+const GitHubClient = require('./utils/GitHubClient');
 
 const ensureDir = util.promisify(fsExtra.ensureDir);
 const writeFile = util.promisify(fs.writeFile);
+
+const TEMP_DIR = '/tmp/appraisejs';
+
+let github;
+
+const downloadCommit = (user, repository, commitId) => {
+  return github
+    .fetchTreeAtCommit(user, repository, commitId)
+    .then((response) => {
+      const { tree } = response.data;
+
+      const downloadFile = filepath => (
+        // Fetch file from GitHub then store locally.
+        github
+          .fetchFileAtCommit(user, repository, commitId, filepath)
+          .then((response) => {
+            const parsed = path.parse(filepath);
+            const dirname = path.join(TEMP_DIR, user, repository, commitId, parsed.dir);
+
+            // Create directory if it does not exist.
+            return ensureDir(dirname)
+              .then(() => writeFile(path.join(dirname, parsed.base), response.data));
+          })
+      );
+
+      // Fetch each file with a separate async promise.
+      const promises = tree
+        .filter(node => node.type === 'blob')
+        .map(node => downloadFile(node.path));
+
+      return Promise.all(promises);
+    })
+};
 
 const decryptBody = body => new Promise((resolve, reject) => {
   // TODO
@@ -63,42 +93,15 @@ const setupExpress = () => {
 };
 
 const test = () => {
-  const tokenType = 'bearer';
-  const token = 'v1.b01ff5ed42e1d90172df46e59f5de91a5710fb3c';
+  github = new GitHubClient('bearer', 'v1.b01ff5ed42e1d90172df46e59f5de91a5710fb3c');
+
   const user = 'inglec';
   const repository = 'fyp-webhook-server';
   const commitId = '7ae42abafaf985108886bb0e5fe006e7c8e5bbf2';
 
-  getTreeAtCommit(tokenType, token, user, repository, commitId)
-    .then((response) => {
-      const { tree } = response.data;
-
-      const fetchAndStoreFile = filepath => (
-        // Fetch file from GitHub then store locally.
-        getFileAtCommit(tokenType, token, user, repository, commitId, filepath)
-          .then((response) => {
-            const parsed = path.parse(filepath);
-            const dirname = path.join('/tmp/appraisejs', user, repository, commitId, parsed.dir);
-
-            // Create directory if it does not exist.
-            return ensureDir(dirname)
-              .then(() => writeFile(path.join(dirname, parsed.base), response.data));
-          })
-      );
-
-      // Fetch each file with a separate async promise.
-      const promises = tree
-        .filter(node => node.type === 'blob')
-        .map(node => fetchAndStoreFile(node.path));
-
-      Promise
-        .all(promises)
-        .then(() => {
-          console.log('Completed writing.');
-        })
-        .catch(console.error);
-    })
-    .catch(console.error)
+  downloadCommit(user, repository, commitId)
+    .then(() => console.log('success!'))
+    .catch(err => console.error(err.response.data));
 };
 
 function main() {
