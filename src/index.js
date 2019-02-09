@@ -1,5 +1,5 @@
 const bodyParser = require('body-parser');
-const dockerode = require('dockerode');
+const Dockerode = require('dockerode');
 const express = require('express');
 const {
   FORBIDDEN,
@@ -12,8 +12,7 @@ const vm2 = require('vm2');
 
 const { downloadArchive } = require('./utils/github_api');
 
-const TEMP_DIR = '/tmp/appraisejs';
-const ARCHIVE_DIR = path.join(TEMP_DIR, 'archive')
+const ARCHIVE_DIR = path.join(__dirname, '..', 'docker', 'archives')
 
 const decryptBody = body => new Promise((resolve, reject) => {
   // TODO
@@ -21,14 +20,18 @@ const decryptBody = body => new Promise((resolve, reject) => {
 });
 
 const initialiseDockerContainer = () => {
-
+  const docker = new Dockerode();
+  const container = docker
+    .listContainers()
+    .then(result => console.log(result))
+    .catch(err => console.error(err));
 };
 
 const runJob = (tokenType, token, owner, repository, commitId) => {
   downloadArchive(tokenType, token, owner, repository, commitId, ARCHIVE_DIR)
     .then(() => {
       console.log('successfully downloaded repository archive');
-      initialiseDockerContainer();
+      // initialiseDockerContainer();
     })
     .catch((err) => console.error(err));
 };
@@ -75,7 +78,7 @@ const test = (app) => {
   const commitId = '7ae42abafaf985108886bb0e5fe006e7c8e5bbf2';
   const owner = 'inglec';
   const repository = 'fyp-webhook-server';
-  const token = 'v1.8667d82aaaacfb77caa1e790c0f683c2a4717207';
+  const token = 'v1.a08f95fbdce67ee98adb87e040c0e010ffd75fbe';
   const tokenType = 'bearer';
 
   runJob(tokenType, token, owner, repository, commitId);

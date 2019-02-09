@@ -1,0 +1,7 @@
+#!/bin/bash
+
+run:
+docker run -p 3000:80 ciaran/fyp-worker
+
+build:
+docker build -t ciaran/fyp-worker .
