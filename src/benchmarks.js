@@ -45,4 +45,4 @@ const benchmarkProject = (rootDir) => {
   const results = runBenchmarks(filtered);
 };
 
-benchmarkProject(path.join(__dirname, '..', '..', 'fyp-test'));
+benchmarkProject(path.join(process.env.NODE_PATH, '..', 'fyp-test'));
