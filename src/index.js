@@ -3,7 +3,6 @@ const Dockerode = require('dockerode');
 const express = require('express');
 const {
   FORBIDDEN,
-  INTERNAL_SERVER_ERROR,
   OK,
 } = require('http-status-codes');
 const _ = require('lodash');
@@ -46,8 +45,8 @@ const setupDockerContainer = (projectDir, imageName = 'worker-image') => {
 
     const progressLogger = createLogger('BuildImage');
 
-    const onProgress = ({ stream }) => {
-      const progress = typeof stream === 'string' ? stream.trim() : null;
+    const onProgress = (update) => {
+      const progress = typeof update.stream === 'string' ? update.stream.trim() : null;
       if (progress) {
         progressLogger.info(progress);
       }
@@ -69,7 +68,7 @@ const setupDockerContainer = (projectDir, imageName = 'worker-image') => {
     )
     .then(dockerLogger.info('Building image'))
     .then(stream => awaitImageBuild(stream))
-    .then(containerId => dockerLogger.info('Running image ', containerId)(containerId))
+    .then(containerId => dockerLogger.info('Running image', containerId)(containerId))
     .then(containerId => dockerode.run(imageName, null, process.stdout));
 };
 
@@ -121,7 +120,7 @@ const setupExpress = () => {
     res.end();
   });
 
-  app.listen(process.env.PORT, () => serverLogger.info('Listening on port ', process.env.PORT));
+  app.listen(process.env.PORT, () => serverLogger.info('Listening on port', process.env.PORT));
 };
 
 const clearArchives = () => new Promise((resolve, reject) => (
