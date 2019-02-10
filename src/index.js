@@ -6,34 +6,86 @@ const {
   INTERNAL_SERVER_ERROR,
   OK,
 } = require('http-status-codes');
+const _ = require('lodash');
+const { default: createLogger } = require('logging');
 const path = require('path');
+const createPromiseLogger = require('promise-logging');
+const rimraf = require('rimraf');
 const util = require('util');
 const vm2 = require('vm2');
 
-const { downloadArchive } = require('./utils/github_api');
+const { downloadArchive } = require(path.join(process.env.NODE_PATH, 'src/utils/github_api'));
 
-const ARCHIVE_DIR = path.join(__dirname, '..', 'docker', 'archives')
+const DOCKER_ARCHIVES = 'archives';
+const DOCKER_PATH = path.join(process.env.NODE_PATH, 'docker');
 
-const decryptBody = body => new Promise((resolve, reject) => {
-  // TODO
-  resolve({ todo: 'body' });
-});
+const serverLogger = createLogger('Server');
 
-const initialiseDockerContainer = () => {
-  const docker = new Dockerode();
-  const container = docker
-    .listContainers()
-    .then(result => console.log(result))
-    .catch(err => console.error(err));
+const setupDockerContainer = (projectDir, imageName = 'worker-image') => {
+  const dockerode = new Dockerode();
+  const dockerLogger = createPromiseLogger('Docker');
+
+  const awaitImageBuild = stream => new Promise((resolve, reject) => {
+    const onComplete = (err, log) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      // Search progress log to see if image was successfully built.
+      for (update of log) {
+        const match = /Successfully built (\w+)\n/.exec(update.stream);
+        if (match) {
+          resolve(match[1]);
+          return;
+        }
+      }
+
+      reject(log);
+    };
+
+    const progressLogger = createLogger('BuildImage');
+
+    const onProgress = ({ stream }) => {
+      const progress = typeof stream === 'string' ? stream.trim() : null;
+      if (progress) {
+        progressLogger.info(progress);
+      }
+    };
+
+    dockerode.modem.followProgress(stream, onComplete, onProgress);
+  });
+
+  return dockerode
+    .buildImage(
+      {
+        context: DOCKER_PATH,
+        src: ['Dockerfile', DOCKER_ARCHIVES]
+      },
+      {
+        buildargs: { PROJECT_DIR: projectDir },
+        t: imageName,
+      },
+    )
+    .then(dockerLogger.info('Building image'))
+    .then(stream => awaitImageBuild(stream))
+    .then(containerId => dockerLogger.info('Running image ', containerId)(containerId))
+    .then(containerId => dockerode.run(imageName, null, process.stdout));
 };
 
 const runJob = (tokenType, token, owner, repository, commitId) => {
-  downloadArchive(tokenType, token, owner, repository, commitId, ARCHIVE_DIR)
-    .then(() => {
-      console.log('successfully downloaded repository archive');
-      // initialiseDockerContainer();
-    })
-    .catch((err) => console.error(err));
+  // downloadArchive(tokenType, token, owner, repository, commitId, DOCKER_ARCHIVES_PATH)
+  //   .then(() => {
+  //     console.log('Successfully downloaded repository archive');
+  //    setupDockerContainer();
+  //   })
+  //   .catch(err => console.error(err.statusMessage));
+
+  const projectDir = path.join(DOCKER_ARCHIVES, owner, repository, commitId);
+
+  setupDockerContainer(projectDir)
+    //.then(result => console.log(result))
+    .catch(console.error);
 };
 
 const setupExpress = () => {
@@ -69,16 +121,18 @@ const setupExpress = () => {
     res.end();
   });
 
-  app.listen(process.env.PORT, () => {
-    console.log(`Server listening on port ${process.env.PORT}...`);
-  });
+  app.listen(process.env.PORT, () => serverLogger.info('Listening on port ', process.env.PORT));
 };
 
+const clearArchives = () => new Promise((resolve, reject) => (
+  rimraf(DOCKER_ARCHIVES_PATH, err => err ? reject(err) : resolve()))
+);
+
 const test = (app) => {
-  const commitId = '7ae42abafaf985108886bb0e5fe006e7c8e5bbf2';
+  const commitId = 'master'; // '7ae42abafaf985108886bb0e5fe006e7c8e5bbf2';
   const owner = 'inglec';
-  const repository = 'fyp-webhook-server';
-  const token = 'v1.a08f95fbdce67ee98adb87e040c0e010ffd75fbe';
+  const repository = 'fyp-test'; // 'fyp-webhook-server';
+  const token = 'v1.a1b25dbd0a457aeaeb053a56a560f898ccc706e5';
   const tokenType = 'bearer';
 
   runJob(tokenType, token, owner, repository, commitId);
@@ -86,6 +140,8 @@ const test = (app) => {
 
 function main() {
   setupExpress();
+
+  // clearArchives().then(test);
 
   test();
 }
