@@ -10,7 +10,7 @@ const downloadArchive = (tokenType, token, owner, repository, commitId, rootDir)
   const dir = path.join(rootDir, owner, repository);
   const promise = download(url, dir, {
     extract: true,
-    headers: { 'Authorization': `${tokenType} ${token}` },
+    headers: { Authorization: `${tokenType} ${token}` },
   });
 
   return promise
@@ -22,6 +22,6 @@ const downloadArchive = (tokenType, token, owner, repository, commitId, rootDir)
 
       return rename(oldPath, newPath);
     });
-}
+};
 
 module.exports = { downloadArchive };
