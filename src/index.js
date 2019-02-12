@@ -63,7 +63,7 @@ const setupDockerContainer = (projectDir, imageName = 'worker-image') => {
       },
     )
     .then(dockerLogger.info('Building image'))
-    .then(stream => awaitImageBuild(stream))
+    .then(awaitImageBuild)
     .then(containerId => dockerLogger.info('Running image', containerId)(containerId))
     .then(containerId => dockerode.run(containerId, null, process.stdout));
 };
