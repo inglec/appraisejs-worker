@@ -1,13 +1,13 @@
 const download = require('download');
-const fs = require('fs');
-const path = require('path');
-const util = require('util');
+const { rename } = require('fs');
+const { join, sep: pathSeparator } = require('path');
+const { promisify } = require('util');
 
-const rename = util.promisify(fs.rename);
+const renameAsync = promisify(rename);
 
 const downloadArchive = (tokenType, token, owner, repository, commitId, rootDir) => {
   const url = `https://api.github.com/repos/${owner}/${repository}/tarball/${commitId}`;
-  const dir = path.join(rootDir, owner, repository);
+  const dir = join(rootDir, owner, repository);
   const promise = download(url, dir, {
     extract: true,
     headers: { Authorization: `${tokenType} ${token}` },
@@ -16,11 +16,11 @@ const downloadArchive = (tokenType, token, owner, repository, commitId, rootDir)
   return promise
     .then((data) => {
       // Rename archive to its commit hash.
-      const archiveName = data[0].path.split(path.sep)[0];
-      const oldPath = path.join(dir, archiveName);
-      const newPath = path.join(dir, commitId);
+      const archiveName = data[0].path.split(pathSeparator)[0];
+      const oldPath = join(dir, archiveName);
+      const newPath = join(dir, commitId);
 
-      return rename(oldPath, newPath);
+      return renameAsync(oldPath, newPath);
     });
 };
 

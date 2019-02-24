@@ -3,15 +3,15 @@ const Dockerode = require('dockerode');
 const express = require('express');
 const { OK } = require('http-status-codes');
 const { default: createLogger } = require('logging');
-const path = require('path');
+const { join } = require('path');
 const createPromiseLogger = require('promise-logging');
 // const rimraf = require('rimraf');
 
 // const { downloadArchive } = require('./utils/github_api');
 
 const DOCKER_ARCHIVES = 'archives';
-const DOCKER_PATH = path.join(process.env.NODE_PATH, 'docker');
-// const DOCKER_ARCHIVES_PATH = path.join(DOCKER_PATH, DOCKER_ARCHIVES);
+const DOCKER_PATH = join(process.env.NODE_PATH, 'docker');
+// const DOCKER_ARCHIVES_PATH = join(DOCKER_PATH, DOCKER_ARCHIVES);
 
 const serverLogger = createLogger('Server');
 
@@ -62,9 +62,9 @@ const setupDockerContainer = (projectDir, imageName = 'worker-image') => {
         t: imageName,
       },
     )
-    .then(dockerLogger.info('Building image'))
+    .then(dockerLogger.infoAwait('Building image'))
     .then(awaitImageBuild)
-    .then(containerId => dockerLogger.info('Running image', containerId)(containerId))
+    .then(containerId => dockerLogger.infoAwait('Running image', containerId)(containerId))
     .then(containerId => dockerode.run(containerId, null, process.stdout));
 };
 
@@ -76,7 +76,7 @@ const runJob = (tokenType, token, owner, repository, commitId) => {
   //   })
   //   .catch(err => console.error(err.statusMessage));
 
-  const projectDir = path.join(DOCKER_ARCHIVES, owner, repository, commitId);
+  const projectDir = join(DOCKER_ARCHIVES, owner, repository, commitId);
 
   setupDockerContainer(projectDir);
 };
