@@ -96,7 +96,7 @@ const setupExpress = () => {
   // app.post('/authenticate', (req, res) => {
   //   // TODO
   // });
-  app.post('/assign', (req, res) => {
+  app.post('/allocate', (req, res) => {
     // TODO: Authenticate requests + validate request body.
 
     res.status(OK);
