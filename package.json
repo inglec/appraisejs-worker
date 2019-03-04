@@ -1,9 +1,11 @@
 {
   "name": "fyp-worker",
   "version": "1.0.0",
+  "author": "Ciarán Ingle",
   "scripts": {
     "lint": "eslint src",
-    "start": "NODE_PATH=. PORT=5000 nodemon src/index"
+    "start": "NODE_PATH=. PORT=5000 nodemon src/server.js",
+    "test": "NODE_PATH=. PORT=5000 jest"
   },
   "dependencies": {
     "axios": "^0.18.0",
@@ -21,7 +23,10 @@
     "eslint": "^5.13.0",
     "eslint-config-airbnb-base": "^13.1.0",
     "eslint-plugin-import": "^2.16.0",
-    "nodemon": "^1.18.9"
-  },
-  "author": "Ciarán Ingle"
+    "eslint-plugin-jest": "^22.3.0",
+    "eslint-plugin-promise": "^4.0.1",
+    "jest": "^24.1.0",
+    "nodemon": "^1.18.9",
+    "supertest": "^3.4.2"
+  }
 }

@@ -1,115 +1,87 @@
 const bodyParser = require('body-parser');
-const Dockerode = require('dockerode');
 const express = require('express');
-const { OK } = require('http-status-codes');
+const { BAD_REQUEST } = require('http-status-codes');
 const { default: createLogger } = require('logging');
 const { join } = require('path');
-const createPromiseLogger = require('promise-logging');
-const rimraf = require('rimraf');
 
-const { downloadArchive } = require('./utils/github_api');
+const { runJob } = require('./docker');
 
-const DOCKER_ARCHIVES = 'archives';
-const DOCKER_PATH = join(process.env.NODE_PATH, 'docker');
-const DOCKER_ARCHIVES_PATH = join(DOCKER_PATH, DOCKER_ARCHIVES);
+const { urls: { runner: RUNNER_URL } } = require('../config.json');
 
-const setupDockerContainer = (projectDir, imageName = 'worker-image') => {
-  const dockerode = new Dockerode();
-  const dockerLogger = createPromiseLogger('Docker');
+const logger = createLogger('appraisejs');
 
-  const awaitImageBuild = stream => (
-    new Promise((resolve, reject) => {
-      const onComplete = (err, log) => {
-        if (err) {
-          reject(err);
-        } else {
-          // Search progress log to see if image was successfully built
-          for (let i = 0; i < log.length; i += 1) {
-            const match = /Successfully built (\w+)\n/.exec(log[i].stream);
-            if (match) {
-              resolve(match[1]);
-              return;
-            }
-          }
-
-          reject(log);
-        }
-      };
-
-      const progressLogger = createLogger('BuildImage');
-
-      const onProgress = (update) => {
-        const progress = typeof update.stream === 'string' ? update.stream.trim() : null;
-        if (progress) {
-          progressLogger.info(progress);
-        }
-      };
-
-      dockerode.modem.followProgress(stream, onComplete, onProgress);
-    })
-  );
-
-  return dockerode
-    .buildImage(
-      {
-        context: DOCKER_PATH,
-        src: ['Dockerfile', DOCKER_ARCHIVES],
-      },
-      {
-        buildargs: { PROJECT_DIR: projectDir },
-        t: imageName,
-      },
-    )
-    .then(dockerLogger.infoAwait('Building image'))
-    .then(awaitImageBuild)
-    .then(containerId => dockerLogger.infoAwait('Running image', containerId)(containerId))
-    .then(containerId => dockerode.run(containerId, null, process.stdout));
-};
-
-const runJob = (tokenType, token, owner, repository, commitId) => {
-  // downloadArchive(tokenType, token, owner, repository, commitId, DOCKER_ARCHIVES_PATH)
-  //   .then(() => {
-  //     console.log('Successfully downloaded repository archive');
-  //     setupDockerContainer();
-  //   })
-  //   .catch(err => console.error(err.statusMessage));
-
-  const projectDir = join(DOCKER_ARCHIVES, owner, repository, commitId);
-
-  setupDockerContainer(projectDir);
-};
-
-const clearArchives = () => new Promise((resolve, reject) => {
-  rimraf(DOCKER_ARCHIVES_PATH, err => (err ? reject(err) : resolve()));
-});
-
-const setupExpress = () => {
+/**
+ * @param {string} dockerContext - The directory of the dockerfile
+ * @param {string} dockerArchives - The directory within the docker context to download archives
+ * @returns {object}
+ */
+const setupExpress = (dockerContext) => {
   const app = express();
+  const appLogger = createLogger('appraisejs:app');
 
   app.use(bodyParser.json());
   app.use(bodyParser.urlencoded({ extended: false }));
-
-  // GET routes
-  app.get('/', (req, res) => {
-    res.status(OK).send('Hello world');
+  app.use((req, res, next) => {
+    appLogger.debug(req.method, req.originalUrl, req.body);
+    next();
   });
 
-  // POST routes
-  // app.post('/authenticate', (req, res) => {
-  //   // TODO
-  // });
-  app.post('/allocate', (req, res) => {
-    // TODO: Authenticate requests + validate request body
+  app.get('/', (req, res) => res.send('test'));
 
-    res.status(OK).end();
+  app.post('/allocate', (req, res) => {
+    /**
+     * TODO: Authenticate requests
+     */
+
+    const {
+      accessToken,
+      commitId,
+      owner,
+      repository,
+    } = req.body;
+
+    if (!accessToken) {
+      res.status(BAD_REQUEST).send('no access token provided');
+    } else if (!commitId) {
+      res.status(BAD_REQUEST).send('no commit ID provided');
+    } else if (!owner) {
+      res.status(BAD_REQUEST).send('no owner provided');
+    } else if (!repository) {
+      res.status(BAD_REQUEST).send('no repository provided');
+    } else {
+      /**
+       * TODO: Only run job if not already running one.
+       */
+
+      const promise = runJob(
+        {
+          owner,
+          name: repository,
+          commitId,
+          token: accessToken,
+        },
+        {
+          context: dockerContext,
+          runnerUrl: RUNNER_URL,
+        },
+      );
+
+      promise.catch(logger.error);
+    }
   });
 
   return app;
 };
 
-// Delete any previously-archived repositories
-clearArchives();
+function main() {
+  if (!process.env.NODE_PATH) {
+    throw Error('environment variable NODE_PATH not set');
+  }
 
-const app = setupExpress();
+  const dockerContext = join(process.env.NODE_PATH, 'docker');
+  const app = setupExpress(dockerContext);
 
-module.exports = app;
+  module.exports = app;
+}
+
+main();

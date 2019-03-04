@@ -1,23 +1,30 @@
-# Use official Node runtime as a parent image.
-FROM node:11.9
+# Use official Node runtime as a parent image
+FROM node:8.10
 
-ARG PROJECT_DIR
+# Path to project to be benchmarked
+ARG DEBUG
+ARG PROJECT_URL
+ARG PROJECT_COMMIT=master
+ARG RUNNER_URL
 
-# Set the working directory.
+# Set the working directory
 WORKDIR /container
 
-# Copy the current directory contents into the container.
+# Copy the current directory contents into the container
 COPY . /container
 
-# Install any packages specified in the project's package.json.
-RUN npm install --prefix $PROJECT_DIR
+# Fetch up-to-date runner process from GitHub and install dependencies
+RUN git clone $RUNNER_URL runner
+RUN npm install --prefix runner
 
-# Make port 80 available to the world outside this container.
-EXPOSE 80
+# Fetch project to be benchmarked from GitHub and install dependencies
+RUN git clone $PROJECT_URL project
+RUN git -C project reset --hard $PROJECT_COMMIT
+RUN npm install --prefix project
 
-# Define environment variables.
-ENV NODE_PATH $PWD
-ENV PROJECT_DIR $PROJECT_DIR
+# Set environment variables
+ENV DEBUG $DEBUG
+ENV NODE_PATH /container/runner
 
-# Run app when the container launches.
-CMD npm start --prefix $PROJECT_DIR
+# Run runner process when the container launches
+CMD DEBUG=$DEBUG npm start --prefix runner -- --path=/container/project

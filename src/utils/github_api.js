@@ -13,15 +13,18 @@ const downloadArchive = (tokenType, token, owner, repository, commitId, rootDir)
     headers: { Authorization: `${tokenType} ${token}` },
   });
 
-  return promise
-    .then((data) => {
-      // Rename archive to its commit hash.
-      const archiveName = data[0].path.split(pathSeparator)[0];
-      const oldPath = join(dir, archiveName);
-      const newPath = join(dir, commitId);
+  return promise.then((data) => {
+    if (data.length === 0) {
+      throw Error('no files fetched');
+    }
 
-      return renameAsync(oldPath, newPath);
-    });
+    // Rename archive to its commit hash.
+    const archiveName = data[0].path.split(pathSeparator)[0];
+    const oldPath = join(dir, archiveName);
+    const newPath = join(dir, commitId);
+
+    return renameAsync(oldPath, newPath);
+  });
 };
 
 module.exports = { downloadArchive };
