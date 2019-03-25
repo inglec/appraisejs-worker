@@ -1,11 +1,14 @@
 /* eslint-disable promise/always-return */
 
+const { config: loadEnv } = require('dotenv');
 const { OK } = require('http-status-codes');
 const supertest = require('supertest');
 
+loadEnv();
+
 const app = require('../src/app');
 
-describe('/', () => {
+describe('GET /', () => {
   test('returns 200 response', () => (
     supertest(app)
       .get('/')
@@ -16,9 +19,9 @@ describe('/', () => {
   ));
 });
 
-describe('/allocate', () => {
+describe('POST /allocate', () => {
   test('returns 200 response', () => {
-    // Check that environment variable has been set.
+    // Check that environment variable has been set
     expect(process.env.ACCESS_TOKEN).toMatch(/^v1\.[a-z|0-9]+$/);
 
     return (

@@ -1,5 +1,6 @@
 {
   "urls": {
-    "runner": "https://github.com/inglec/appraisejs-runner"
+    "runner": "https://github.com/inglec/appraisejs-runner",
+    "supervisor": "http://localhost:3000"
   }
 }

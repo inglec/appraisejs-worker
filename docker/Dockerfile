@@ -3,8 +3,9 @@ FROM node:8.10
 
 # Path to project to be benchmarked
 ARG DEBUG
-ARG PROJECT_URL
+ARG HOST_PORT
 ARG PROJECT_COMMIT=master
+ARG PROJECT_URL
 ARG RUNNER_URL
 
 # Set the working directory
@@ -15,7 +16,7 @@ COPY . /container
 
 # Fetch up-to-date runner process from GitHub and install dependencies
 RUN git clone $RUNNER_URL runner
-RUN npm install --prefix runner
+RUN npm install --production --prefix runner
 
 # Fetch project to be benchmarked from GitHub and install dependencies
 RUN git clone $PROJECT_URL project
@@ -24,7 +25,7 @@ RUN npm install --prefix project
 
 # Set environment variables
 ENV DEBUG $DEBUG
-ENV NODE_PATH /container/runner
+ENV HOST_PORT $HOST_PORT
 
 # Run runner process when the container launches
-CMD DEBUG=$DEBUG npm start --prefix runner -- --path=/container/project
+CMD npm start --prefix runner -- --path=/container/project --hostPort=$HOST_PORT

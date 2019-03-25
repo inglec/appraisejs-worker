@@ -25,6 +25,7 @@ const runInDockerContainer = (
   runnerUrl,
   projectUrl,
   projectCommit = 'master',
+  hostPort,
 ) => {
   const dockerode = new Dockerode();
   const dockerLogger = createPromiseLogger('appraisejs:docker');
@@ -87,15 +88,18 @@ const runInDockerContainer = (
             PROJECT_COMMIT: projectCommit,
             PROJECT_URL: projectUrl,
             RUNNER_URL: runnerUrl,
+            HOST_PORT: hostPort,
           },
-          nocache: true,
-          forcerm: true,
+          // nocache: true,
+          // forcerm: true,
         },
       )
       .then(dockerLogger.debugAwait('Building image'))
       .then(awaitImageBuild)
       .then(containerId => dockerLogger.debugAwait('Running image', containerId)(containerId))
-      .then(containerId => dockerode.run(containerId, null, process.stdout))
+      .then(containerId => (
+        dockerode.run(containerId, null, process.stdout, { hostConfig: { NetworkMode: 'host' } })
+      ))
       .then(dockerLogger.debugAwait('Complete'))
   );
 };
@@ -109,6 +113,7 @@ const runInDockerContainer = (
  * @param {object} dockerConfig
  * @param {string} dockerConfig.context Directory of the dockerfile
  * @param {string} dockerConfig.runnerUrl GitHub URL for the runner process
+ * @param {number} dockerConfig.hostPort Port of the worker process
  * @returns {Promise}
  */
 const runJob = (repository, dockerConfig) => {
@@ -119,7 +124,7 @@ const runJob = (repository, dockerConfig) => {
     token,
   } = repository;
 
-  const { context, runnerUrl } = dockerConfig;
+  const { context, runnerUrl, hostPort } = dockerConfig;
 
   let projectUrl = 'https://';
   if (token) {
@@ -127,7 +132,7 @@ const runJob = (repository, dockerConfig) => {
   }
   projectUrl += `github.com/${owner}/${name}.git`;
 
-  return runInDockerContainer(context, runnerUrl, projectUrl, commitId);
+  return runInDockerContainer(context, runnerUrl, projectUrl, commitId, hostPort);
 };
 
 module.exports = { clearArchives, runJob };

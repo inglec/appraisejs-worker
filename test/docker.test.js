@@ -4,7 +4,7 @@ const { runJob } = require('../src/docker');
 const { urls: { runner: RUNNER_URL } } = require('../config.json');
 
 describe('runJob', () => {
-  // Set 2 minute timeout.
+  // Set 2 minute timeout
   const timeout = 1000 * 60 * 2;
 
   test('runs sample project', () => {

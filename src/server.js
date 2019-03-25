@@ -2,12 +2,19 @@ const { default: createLogger } = require('logging');
 
 const app = require('./app');
 
-const logger = createLogger('Server');
+const { PORT, WORKER_ID } = process.env;
+if (!PORT) {
+  throw Error('environment variable PORT not set');
+}
+if (!WORKER_ID) {
+  throw Error('environment variable WORKER_ID not set');
+}
 
-app.listen(process.env.PORT, (err) => {
-  if (err) {
-    throw err;
+app.listen(PORT, (error) => {
+  if (error) {
+    throw error;
   }
 
-  logger.info(`Listening on port ${process.env.PORT}`);
+  const logger = createLogger('Server');
+  logger.info('Worker', WORKER_ID, 'listening on port', PORT);
 });

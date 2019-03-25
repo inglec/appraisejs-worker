@@ -1,21 +1,40 @@
 const bodyParser = require('body-parser');
 const express = require('express');
-const { BAD_REQUEST } = require('http-status-codes');
+const { BAD_REQUEST, INTERNAL_SERVER_ERROR, SERVICE_UNAVAILABLE } = require('http-status-codes');
 const { default: createLogger } = require('logging');
 const { join } = require('path');
+const requestPromise = require('request-promise-native');
 
 const { runJob } = require('./docker');
+const Worker = require('./Worker');
 
-const { urls: { runner: RUNNER_URL } } = require('../config.json');
+const {
+  urls: {
+    runner: RUNNER_URL,
+    supervisor: SUPERVISOR_URL,
+  },
+} = require('../config.json');
+
+const { NODE_PATH, PORT, WORKER_ID } = process.env;
+if (!NODE_PATH) {
+  throw Error('environment variable NODE_PATH not set');
+}
+if (!PORT) {
+  throw Error('environment variable PORT not set');
+}
+if (!WORKER_ID) {
+  throw Error('environment variable WORKER_ID not set');
+}
 
 const logger = createLogger('appraisejs');
+let worker;
 
 /**
- * @param {string} dockerContext - The directory of the dockerfile
- * @param {string} dockerArchives - The directory within the docker context to download archives
+ * @param {string} dockerContext Directory of the dockerfile
+ * @param {number} port Port this application is run on
  * @returns {object}
  */
-const setupExpress = (dockerContext) => {
+const setupExpress = (dockerContext, port) => {
   const app = express();
   const appLogger = createLogger('appraisejs:app');
 
@@ -26,8 +45,19 @@ const setupExpress = (dockerContext) => {
     next();
   });
 
+  // Test endpoint to verify connection
   app.get('/', (req, res) => res.send('test'));
 
+  // Get worker ID
+  app.get('/identity', (req, res) => {
+    if (worker) {
+      res.send({ workerId: worker.id });
+    } else {
+      res.status(INTERNAL_SERVER_ERROR).send('worker not yet set up');
+    }
+  });
+
+  // Receive new job from supervisor
   app.post('/allocate', (req, res) => {
     /**
      * TODO: Authenticate requests
@@ -37,7 +67,7 @@ const setupExpress = (dockerContext) => {
       accessToken,
       commitId,
       owner,
-      repository,
+      repository: name,
     } = req.body;
 
     if (!accessToken) {
@@ -46,27 +76,55 @@ const setupExpress = (dockerContext) => {
       res.status(BAD_REQUEST).send('no commit ID provided');
     } else if (!owner) {
       res.status(BAD_REQUEST).send('no owner provided');
-    } else if (!repository) {
-      res.status(BAD_REQUEST).send('no repository provided');
+    } else if (!name) {
+      res.status(BAD_REQUEST).send('no repository name provided');
+    } else if (!worker.isFree()) {
+      res.status(SERVICE_UNAVAILABLE).send('already processing job');
     } else {
-      /**
-       * TODO: Only run job if not already running one.
-       */
+      res.end();
 
-      const promise = runJob(
-        {
-          owner,
-          name: repository,
-          commitId,
-          token: accessToken,
-        },
-        {
-          context: dockerContext,
-          runnerUrl: RUNNER_URL,
-        },
-      );
+      worker.beginBenchmark(owner, name, commitId);
 
-      promise.catch(logger.error);
+      const repository = {
+        owner,
+        name,
+        commitId,
+        token: accessToken,
+      };
+      const dockerConfig = {
+        context: dockerContext,
+        runnerUrl: RUNNER_URL,
+        hostPort: port,
+      };
+      runJob(repository, dockerConfig).catch(logger.error);
+    }
+  });
+
+  // Receive benchmark results from local runner process
+  app.post('/results', (req, res) => {
+    const { body: results, ip } = req;
+
+    // Only accept requests from this host
+    if (ip === '::ffff:127.0.0.1') {
+      if (results) {
+        res.end();
+
+        const body = worker.endBenchmark(results);
+
+        // Forward results to supervisor
+        const request = requestPromise({
+          method: 'POST',
+          uri: `${SUPERVISOR_URL}/results`,
+          body,
+          json: true,
+        });
+
+        request.catch(error => logger.error(error));
+      } else {
+        res.status(BAD_REQUEST).send('missing body field');
+      }
+    } else {
+      res.status(BAD_REQUEST).send('invalid IP');
     }
   });
 
@@ -74,12 +132,10 @@ const setupExpress = (dockerContext) => {
 };
 
 function main() {
-  if (!process.env.NODE_PATH) {
-    throw Error('environment variable NODE_PATH not set');
-  }
+  const dockerContext = join(NODE_PATH, 'docker');
+  const app = setupExpress(dockerContext, PORT);
 
-  const dockerContext = join(process.env.NODE_PATH, 'docker');
-  const app = setupExpress(dockerContext);
+  worker = new Worker(WORKER_ID);
 
   module.exports = app;
 }

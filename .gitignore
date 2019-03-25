@@ -1,3 +1,4 @@
+.env
 docker/archives
 node_modules
 npm-debug.log
