@@ -5,7 +5,7 @@
   "scripts": {
     "lint": "eslint src",
     "start": "NODE_PATH=$PWD nodemon -r dotenv/config src/server.js",
-    "test": "jest"
+    "test": "NODE_PATH=$PWD jest"
   },
   "dependencies": {
     "axios": "^0.18.0",
