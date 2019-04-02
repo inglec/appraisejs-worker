@@ -4,7 +4,7 @@
   "author": "Ciarán Ingle",
   "scripts": {
     "lint": "eslint src",
-    "start": "NODE_PATH=$PWD nodemon -r dotenv/config src/server.js",
+    "start": "NODE_PATH=$PWD node -r dotenv/config src/server.js",
     "test": "NODE_PATH=$PWD jest"
   },
   "dependencies": {

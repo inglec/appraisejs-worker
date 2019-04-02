@@ -1,9 +1,9 @@
 const bodyParser = require('body-parser');
+const { writeFileSync } = require('fs');
 const express = require('express');
 const { BAD_REQUEST, INTERNAL_SERVER_ERROR, SERVICE_UNAVAILABLE } = require('http-status-codes');
 const { default: createLogger } = require('logging');
 const { join } = require('path');
-const requestPromise = require('request-promise-native');
 
 const { runJob } = require('./docker');
 const Worker = require('./Worker');
@@ -63,6 +63,9 @@ const setupExpress = (dockerContext, port) => {
      * TODO: Authenticate requests
      */
 
+    const time = new Date().getTime();
+    logger.info(`RECEIVE NEW JOB AT <<<${time}>>>`);
+
     const {
       accessToken,
       commitId,
@@ -70,9 +73,7 @@ const setupExpress = (dockerContext, port) => {
       repository: name,
     } = req.body;
 
-    if (!accessToken) {
-      res.status(BAD_REQUEST).send('no access token provided');
-    } else if (!commitId) {
+    if (!commitId) {
       res.status(BAD_REQUEST).send('no commit ID provided');
     } else if (!owner) {
       res.status(BAD_REQUEST).send('no owner provided');
@@ -102,6 +103,9 @@ const setupExpress = (dockerContext, port) => {
 
   // Receive benchmark results from local runner process
   app.post('/results', (req, res) => {
+    const time = new Date().getTime();
+    logger.info(`RECEIVE RESULTS AT <<<${time}>>>`);
+
     const { body: results, ip } = req;
 
     // Only accept requests from this host
@@ -111,15 +115,9 @@ const setupExpress = (dockerContext, port) => {
 
         const body = worker.endBenchmark(results);
 
-        // Forward results to supervisor
-        const request = requestPromise({
-          method: 'POST',
-          uri: `${SUPERVISOR_URL}/results`,
-          body,
-          json: true,
-        });
-
-        request.catch(error => logger.error(error));
+        const filename = `${new Date().getTime()}.json`;
+        logger.info('WRITE RESULTS', filename);
+        writeFileSync(filename, JSON.stringify(body));
       } else {
         res.status(BAD_REQUEST).send('missing body field');
       }

@@ -94,13 +94,25 @@ const runInDockerContainer = (
           // forcerm: true,
         },
       )
-      .then(dockerLogger.debugAwait('Building image'))
+      .then((x) => {
+        const time = new Date().getTime();
+        dockerLogger.info(`BUILD IMAGE AT <<<${time}>>>`);
+        return x;
+      })
       .then(awaitImageBuild)
-      .then(containerId => dockerLogger.debugAwait('Running image', containerId)(containerId))
+      .then((x) => {
+        const time = new Date().getTime();
+        dockerLogger.info(`RUN CONTAINER AT <<<${time}>>>`);
+        return x;
+      })
       .then(containerId => (
         dockerode.run(containerId, null, process.stdout, { hostConfig: { NetworkMode: 'host' } })
       ))
-      .then(dockerLogger.debugAwait('Complete'))
+      .then((x) => {
+        const time = new Date().getTime();
+        dockerLogger.info(`STOP CONTAINER AT <<<${time}>>>`);
+        return x;
+      })
   );
 };
 
