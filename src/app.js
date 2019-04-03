@@ -115,9 +115,9 @@ const setupExpress = (dockerContext, port) => {
 
         const body = worker.endBenchmark(results);
 
-        const filename = `${new Date().getTime()}.json`;
-        logger.info('WRITE RESULTS', filename);
-        writeFileSync(filename, JSON.stringify(body));
+        const path = `results/${new Date().getTime()}.json`;
+        logger.info('WRITE RESULTS', path);
+        writeFileSync(path, JSON.stringify(body));
       } else {
         res.status(BAD_REQUEST).send('missing body field');
       }
