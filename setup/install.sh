@@ -1,5 +1,3 @@
-PORT=5000
-
 echo "updating packages"
 apt update
 apt upgrade -y
